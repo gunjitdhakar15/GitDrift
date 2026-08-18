@@ -5,10 +5,11 @@ gitdrift-server
 gitdrift-server.exe
 *.exe
 
-# Reports
+# Reports (generated artifacts — not the embedded web UI)
 gitdrift-report.html
 gin-health.html
 *.html
+!server/webui/index.html
 
 # Logs
 *.log

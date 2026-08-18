@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitDrift — Analyze any GitHub repo</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --fg:#c9d1d9; --muted:#8b949e;
+          --accent:#58a6ff; --warn:#d29922; --danger:#f85149; --ok:#3fb950; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.6 "Segoe UI", system-ui, sans-serif;
+         min-height:100vh; padding:40px 20px; }
+  .wrap { max-width:920px; margin:0 auto; }
+  h1 { font-size:24px; margin-bottom:4px; }
+  .sub { color:var(--muted); margin-bottom:28px; }
+  .box { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; }
+  label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.5px;
+          color:var(--muted); margin-bottom:8px; }
+  input[type=text], select {
+    width:100%; background:#0d1117; color:var(--fg); border:1px solid var(--border);
+    border-radius:8px; padding:12px 14px; font-size:14px; font-family:Consolas, monospace;
+  }
+  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
+  .row .depth { width:180px; }
+  .row .grow { flex:1; }
+  button {
+    background:var(--accent); color:#0d1117; border:none; border-radius:8px;
+    padding:12px 26px; font-size:14px; font-weight:700; cursor:pointer;
+  }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .samples { margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { background:#0d1117; border:1px solid var(--border); color:var(--muted);
+          border-radius:20px; padding:4px 12px; font-size:12px; cursor:pointer; }
+  .chip:hover { border-color:var(--accent); color:var(--accent); }
+  .status { display:none; margin-top:20px; }
+  .status.active { display:block; }
+  .progress { height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-top:10px; }
+  .progress span { display:block; height:100%; width:0%; background:var(--accent);
+                   transition:width .4s ease; }
+  .msg { margin-top:12px; color:var(--muted); }
+  .msg.err { color:var(--danger); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px;
+           margin:24px 0; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .card .num { font-size:24px; font-weight:700; }
+  .card .lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .num.ok { color:var(--ok); } .num.bad { color:var(--danger); } .num.warn { color:var(--warn); }
+  h2 { font-size:15px; margin:22px 0 10px; color:var(--accent); }
+  table { width:100%; border-collapse:collapse; background:var(--card);
+          border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th,td { text-align:left; padding:7px 12px; border-bottom:1px solid var(--border); font-size:13px; }
+  th { background:#21262d; color:var(--muted); font-size:11px; text-transform:uppercase; }
+  tr:last-child td { border-bottom:none; }
+  code { font-family:Consolas,monospace; font-size:12px; color:var(--accent); word-break:break-all; }
+  .links { margin-top:18px; display:flex; gap:12px; flex-wrap:wrap; }
+  .links a { color:var(--accent); font-size:14px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🚀 GitDrift</h1>
+  <div class="sub">Paste any GitHub repository URL — shallow-clone, analyze, and get a full drift report. No local clone needed.</div>
+
+  <div class="box">
+    <label for="url">GitHub repository</label>
+    <input type="text" id="url" placeholder="https://github.com/gin-gonic/gin" value="https://github.com/gin-gonic/gin">
+    <div class="row">
+      <div class="grow"></div>
+      <div class="depth">
+        <label for="depth">Clone depth</label>
+        <select id="depth">
+          <option value="50">50 commits</option>
+          <option value="100" selected>100 commits</option>
+          <option value="200">200 commits</option>
+          <option value="500">500 commits</option>
+          <option value="1000">1000 commits</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end">
+        <button id="go" onclick="analyze()">Analyze</button>
+      </div>
+    </div>
+    <div class="samples">
+      <span class="chip" onclick="setUrl('https://github.com/gin-gonic/gin')">gin-gonic/gin</span>
+      <span class="chip" onclick="setUrl('https://github.com/uber-go/zap')">uber-go/zap</span>
+      <span class="chip" onclick="setUrl('https://github.com/spf13/cobra')">spf13/cobra</span>
+      <span class="chip" onclick="setUrl('https://github.com/minio/minio')">minio/minio</span>
+      <span class="chip" onclick="setUrl('https://github.com/gohugoio/hugo')">gohugoio/hugo</span>
+    </div>
+  </div>
+
+  <div class="status box" id="status">
+    <span id="stage" style="font-weight:600"></span>
+    <div class="progress"><span id="bar"></span></div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="cards">
+      <div class="card"><div class="num" id="c-files"></div><div class="lbl">Files</div></div>
+      <div class="card"><div class="num" id="c-lines"></div><div class="lbl">Lines</div></div>
+      <div class="card"><div class="num" id="c-pkgs"></div><div class="lbl">Packages</div></div>
+      <div class="card"><div class="num warn" id="c-todos"></div><div class="lbl">TODOs</div></div>
+      <div class="card"><div class="num" id="c-hot"></div><div class="lbl">Hotspots</div></div>
+      <div class="card"><div class="num" id="c-stale"></div><div class="lbl">Stale files</div></div>
+      <div class="card"><div class="num ok" id="c-cycles"></div><div class="lbl">Import cycles</div></div>
+    </div>
+
+    <div class="links">
+      <a id="link-report" href="#" target="_blank" onclick="return false">Open full dashboard ↗</a>
+      <a id="link-json" href="#" target="_blank">Download JSON</a>
+    </div>
+
+    <h2>High-churn hotspots</h2>
+    <table id="t-hot"></table>
+    <h2>Tech debt</h2>
+    <table id="t-todo"></table>
+    <h2>Stale files</h2>
+    <table id="t-stale"></table>
+    <h2>Circular imports</h2>
+    <div id="t-cycles" style="color:var(--muted)"></div>
+  </div>
+</div>
+
+<script>
+let jobId = null;
+let pollTimer = null;
+
+function setUrl(u) { document.getElementById('url').value = u; }
+
+function analyze() {
+  const url = document.getElementById('url').value.trim();
+  const depth = parseInt(document.getElementById('depth').value, 10);
+  const statusEl = document.getElementById('status');
+  const msgEl = document.getElementById('msg');
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+  statusEl.classList.add('active');
+  document.getElementById('bar').style.width = '5%';
+  document.getElementById('stage').textContent = 'Submitting job…';
+  document.getElementById('go').disabled = true;
+
+  fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, depth })
+  })
+  .then(async r => {
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || 'request failed');
+    jobId = body.id;
+    document.getElementById('stage').textContent = 'Job ' + jobId;
+    pollTimer = setInterval(poll, 1200);
+  })
+  .catch(err => {
+    msgEl.textContent = 'Error: ' + err.message;
+    msgEl.className = 'msg err';
+    document.getElementById('go').disabled = false;
+    document.getElementById('bar').style.width = '0%';
+  });
+}
+
+function poll() {
+  if (!jobId) return;
+  fetch('/api/status?id=' + encodeURIComponent(jobId))
+  .then(async r => {
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || 'status failed');
+
+    const stage = document.getElementById('stage');
+    const bar = document.getElementById('bar');
+    const msg = document.getElementById('msg');
+    msg.className = 'msg';
+
+    if (body.stage === 'queued')   { stage.textContent = 'Queued — waiting for a worker'; bar.style.width = '5%'; }
+    if (body.stage === 'cloning')  { stage.textContent = 'Cloning repository (shallow clone)…'; bar.style.width = '35%'; }
+    if (body.stage === 'analyzing'){ stage.textContent = 'Running analyzers…'; bar.style.width = '70%'; }
+
+    if (body.stage === 'failed') {
+      clearInterval(pollTimer);
+      stage.textContent = 'Analysis failed';
+      msg.textContent = body.error || 'Unknown error';
+      msg.className = 'msg err';
+      document.getElementById('go').disabled = false;
+      return;
+    }
+
+    if (body.stage === 'done') {
+      clearInterval(pollTimer);
+      bar.style.width = '100%';
+      stage.textContent = 'Analysis complete';
+      const r = body.result;
+      msg.textContent = (r.stats.TotalFiles + ' files · ' + r.stats.TotalLines.toLocaleString() +
+        ' lines · ' + (r.todos ? r.todos.length : 0) + ' TODOs · ' +
+        (r.import_cycles ? r.import_cycles.length : 0) + ' cycles');
+      showResults(r);
+      document.getElementById('go').disabled = false;
+    }
+  })
+  .catch(err => {
+    clearInterval(pollTimer);
+    document.getElementById('msg').textContent = 'Error: ' + err.message;
+    document.getElementById('msg').className = 'msg err';
+    document.getElementById('go').disabled = false;
+  });
+}
+
+function showResults(r) {
+  document.getElementById('results').classList.remove('hidden');
+  document.getElementById('c-files').textContent = r.stats.TotalFiles;
+  document.getElementById('c-lines').textContent = r.stats.TotalLines.toLocaleString();
+  document.getElementById('c-pkgs').textContent = r.packages ? r.packages.length : 0;
+  document.getElementById('c-todos').textContent = r.todos ? r.todos.length : 0;
+  document.getElementById('c-hot').textContent = r.hotspots ? r.hotspots.length : 0;
+  document.getElementById('c-stale').textContent = r.stale_files ? r.stale_files.length : 0;
+  const cyc = r.import_cycles ? r.import_cycles.length : 0;
+  const cycEl = document.getElementById('c-cycles');
+  cycEl.textContent = cyc;
+  cycEl.className = 'num ' + (cyc ? 'bad' : 'ok');
+
+  const reportUrl = '/api/report?id=' + encodeURIComponent(jobId);
+  const link = document.getElementById('link-report');
+  link.href = reportUrl;
+  link.onclick = null;
+  document.getElementById('link-json').href = reportUrl + '&json=1';
+
+  document.getElementById('t-hot').innerHTML =
+    '<tr><th>Commits</th><th>File</th></tr>' +
+    (r.hotspots || []).map(h => `<tr><td>${h.CommitCount}</td><td><code>${esc(h.Path)}</code></td></tr>`).join('');
+
+  document.getElementById('t-todo').innerHTML =
+    '<tr><th>Tag</th><th>Location</th><th>Content</th></tr>' +
+    (r.todos || []).slice(0, 25).map(t =>
+      `<tr><td>${t.Tag}</td><td><code>${esc(t.File)}:${t.Line}</code></td><td>${esc(t.Content.slice(0, 90))}</td></tr>`).join('');
+
+  document.getElementById('t-stale').innerHTML =
+    '<tr><th>Days idle</th><th>File</th></tr>' +
+    (r.stale_files || []).map(s => `<tr><td>${s.DaysIdle}</td><td><code>${esc(s.Path)}</code></td></tr>`).join('');
+
+  const cyclesEl = document.getElementById('t-cycles');
+  cyclesEl.innerHTML = (r.import_cycles || []).length
+    ? (r.import_cycles || []).map(c => `<div style="color:var(--danger)">✗ ${c.Path.map(p => `<code>${esc(p)}</code>`).join(' → ')}</div>`).join('')
+    : 'No circular imports detected ✓';
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>
