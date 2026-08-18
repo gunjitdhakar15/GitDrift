@@ -38,15 +38,26 @@ Global flags:
 )
 
 func main() {
-	rootDir := "."
-	globalFlags := flag.NewFlagSet("gitdrift", flag.ExitOnError)
-	globalFlags.StringVar(&rootDir, "dir", ".", "Git repository to analyze")
-	_ = globalFlags.Bool("json", false, "Emit machine-readable JSON")
-	_ = globalFlags.Bool("help", false, "Show help")
-
 	if len(os.Args) < 2 {
 		fmt.Print(usage)
 		os.Exit(0)
+	}
+
+	command := os.Args[1]
+
+	// Extract the global --dir flag, which may appear before the subcommand.
+	rootDir, rest, err := parseGlobalFlags(os.Args[1:])
+	if err != nil {
+		fail("%v", err)
+	}
+	if command == "--dir" || command == "-dir" {
+		// "--dir X scan" style: re-derive command from the remaining args.
+		if len(rest) == 0 {
+			fmt.Print(usage)
+			os.Exit(0)
+		}
+		command = rest[0]
+		rest = rest[1:]
 	}
 
 	absRoot, err := filepath.Abs(rootDir)
@@ -54,26 +65,54 @@ func main() {
 		fail("resolve path: %v", err)
 	}
 
-	switch os.Args[1] {
+	// Strip the leading command name so per-command flag parsing
+	// isn't stopped by a non-flag argument.
+	if len(rest) > 0 && rest[0] == command {
+		rest = rest[1:]
+	}
+
+	switch command {
 	case "scan":
-		cmdScan(os.Args[2:], absRoot)
+		cmdScan(rest, absRoot)
 	case "stale":
-		cmdStale(os.Args[2:], absRoot)
+		cmdStale(rest, absRoot)
 	case "todos":
-		cmdTodos(os.Args[2:], absRoot)
+		cmdTodos(rest, absRoot)
 	case "hotspots":
-		cmdHotspots(os.Args[2:], absRoot)
+		cmdHotspots(rest, absRoot)
 	case "deps":
-		cmdDeps(os.Args[2:], absRoot)
+		cmdDeps(rest, absRoot)
 	case "report":
-		cmdReport(os.Args[2:], absRoot)
+		cmdReport(rest, absRoot)
 	case "version":
 		fmt.Println("gitdrift", version)
 	case "--help", "-h", "help":
 		fmt.Print(usage)
 	default:
-		fail("unknown command %q\n\n%s", os.Args[1], usage)
+		fail("unknown command %q\n\n%s", command, usage)
 	}
+}
+
+// parseGlobalFlags pulls --dir out of the raw args (before the subcommand).
+func parseGlobalFlags(args []string) (rootDir string, rest []string, err error) {
+	rootDir = "."
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--dir", "-dir":
+			if i+1 >= len(args) {
+				return "", nil, fmt.Errorf("flag %s requires a value", args[i])
+			}
+			rootDir = args[i+1]
+			i++
+		case "--json":
+			rest = append(rest, args[i])
+		case "--help", "-h":
+			rest = append(rest, args[i])
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	return rootDir, rest, nil
 }
 
 func cmdScan(args []string, rootDir string) {
