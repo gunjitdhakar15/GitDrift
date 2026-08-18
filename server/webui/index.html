@@ -3,72 +3,246 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GitDrift — Analyze any GitHub repo</title>
+<title>GitDrift — Monorepo Drift Analyzer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='10' y='10' width='80' height='80' rx='18' fill='%2358a6ff'/><text x='50' y='68' font-size='52' text-anchor='middle' font-family='monospace' font-weight='bold' fill='%230a0e14'>G</text></svg>">
 <style>
-  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --fg:#c9d1d9; --muted:#8b949e;
-          --accent:#58a6ff; --warn:#d29922; --danger:#f85149; --ok:#3fb950; }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { background:var(--bg); color:var(--fg); font:14px/1.6 "Segoe UI", system-ui, sans-serif;
-         min-height:100vh; padding:40px 20px; }
-  .wrap { max-width:920px; margin:0 auto; }
-  h1 { font-size:24px; margin-bottom:4px; }
-  .sub { color:var(--muted); margin-bottom:28px; }
-  .box { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; }
-  label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.5px;
-          color:var(--muted); margin-bottom:8px; }
-  input[type=text], select {
-    width:100%; background:#0d1117; color:var(--fg); border:1px solid var(--border);
-    border-radius:8px; padding:12px 14px; font-size:14px; font-family:Consolas, monospace;
+  :root {
+    --bg: #0a0e14; --bg2: #0d1117; --card: #121821; --card2: #161d29;
+    --border: #1f2a3a; --border2: #2c3a52;
+    --fg: #e6edf3; --muted: #8b98a9; --dim: #5c6b7e;
+    --accent: #58a6ff; --accent2: #8b6cff; --ok: #3fb950; --warn: #d29922; --danger: #f85149;
+    --grad: linear-gradient(135deg, #58a6ff 0%, #8b6cff 100%);
+    --radius: 14px;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
   }
-  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
-  .row .depth { width:180px; }
-  .row .grow { flex:1; }
-  button {
-    background:var(--accent); color:#0d1117; border:none; border-radius:8px;
-    padding:12px 26px; font-size:14px; font-weight:700; cursor:pointer;
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(900px 400px at 80% -10%, rgba(88,166,255,.08), transparent 60%),
+      radial-gradient(700px 400px at 10% -10%, rgba(139,108,255,.08), transparent 60%),
+      var(--bg);
+    color: var(--fg);
+    font: 15px/1.65 "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
   }
-  button:disabled { opacity:.5; cursor:not-allowed; }
-  .samples { margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; }
-  .chip { background:#0d1117; border:1px solid var(--border); color:var(--muted);
-          border-radius:20px; padding:4px 12px; font-size:12px; cursor:pointer; }
-  .chip:hover { border-color:var(--accent); color:var(--accent); }
-  .status { display:none; margin-top:20px; }
-  .status.active { display:block; }
-  .progress { height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-top:10px; }
-  .progress span { display:block; height:100%; width:0%; background:var(--accent);
-                   transition:width .4s ease; }
-  .msg { margin-top:12px; color:var(--muted); }
-  .msg.err { color:var(--danger); }
-  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px;
-           margin:24px 0; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; }
-  .card .num { font-size:24px; font-weight:700; }
-  .card .lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
-  .num.ok { color:var(--ok); } .num.bad { color:var(--danger); } .num.warn { color:var(--warn); }
-  h2 { font-size:15px; margin:22px 0 10px; color:var(--accent); }
-  table { width:100%; border-collapse:collapse; background:var(--card);
-          border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-  th,td { text-align:left; padding:7px 12px; border-bottom:1px solid var(--border); font-size:13px; }
-  th { background:#21262d; color:var(--muted); font-size:11px; text-transform:uppercase; }
-  tr:last-child td { border-bottom:none; }
-  code { font-family:Consolas,monospace; font-size:12px; color:var(--accent); word-break:break-all; }
-  .links { margin-top:18px; display:flex; gap:12px; flex-wrap:wrap; }
-  .links a { color:var(--accent); font-size:14px; }
-  .hidden { display:none; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* ── Header ─────────────────────────────── */
+  header { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -.2px; }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 9px; background: var(--grad);
+    display: grid; place-items: center; font-family: var(--mono); font-weight: 800;
+    font-size: 17px; color: #0a0e14; box-shadow: 0 4px 18px rgba(88,166,255,.35);
+  }
+  .logo small { color: var(--dim); font-weight: 600; font-size: 12px; margin-top: 3px; }
+  .logo .stack { display: flex; flex-direction: column; }
+  nav a {
+    color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 600;
+    padding: 7px 13px; border-radius: 8px; transition: .15s;
+  }
+  nav a:hover { color: var(--fg); background: var(--card); }
+  nav .btn {
+    color: var(--fg); background: var(--card); border: 1px solid var(--border2);
+    padding: 8px 15px; margin-left: 6px;
+  }
+  nav .btn:hover { border-color: var(--accent); background: var(--card2); }
+
+  /* ── Hero ───────────────────────────────── */
+  .hero { text-align: center; padding: 56px 0 36px; }
+  .hero .kicker {
+    display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--accent);
+    border: 1px solid rgba(88,166,255,.35); background: rgba(88,166,255,.08);
+    padding: 5px 14px; border-radius: 100px; margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: clamp(34px, 5vw, 52px); line-height: 1.12; font-weight: 800;
+    letter-spacing: -1.5px; margin-bottom: 16px;
+  }
+  .hero h1 .grad { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { color: var(--muted); font-size: 17px; max-width: 640px; margin: 0 auto 26px; }
+  .hero .stats { display: flex; gap: 34px; justify-content: center; flex-wrap: wrap; }
+  .hero .stats div { text-align: center; }
+  .hero .stats b { display: block; font-size: 22px; font-weight: 800; font-family: var(--mono); }
+  .hero .stats span { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; }
+
+  /* ── Input card ─────────────────────────── */
+  .box {
+    background: linear-gradient(180deg, var(--card2), var(--card));
+    border: 1px solid var(--border2); border-radius: var(--radius);
+    padding: 26px; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  }
+  .box label {
+    display: block; font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.1px; color: var(--dim); margin-bottom: 9px;
+  }
+  .input-row { display: flex; gap: 10px; }
+  .url-input {
+    flex: 1; display: flex; align-items: center; gap: 10px;
+    background: var(--bg); border: 1px solid var(--border2); border-radius: 10px;
+    padding: 0 16px; transition: border-color .15s;
+  }
+  .url-input:focus-within { border-color: var(--accent); }
+  .url-input .ic { color: var(--dim); font-family: var(--mono); font-size: 13px; }
+  .url-input input {
+    width: 100%; background: transparent; border: none; outline: none;
+    color: var(--fg); font-family: var(--mono); font-size: 14px; padding: 15px 0;
+  }
+  .url-input input::placeholder { color: var(--dim); }
+  .depth-wrap { display: flex; align-items: center; gap: 8px; background: var(--bg);
+    border: 1px solid var(--border2); border-radius: 10px; padding: 0 12px; }
+  .depth-wrap span { color: var(--dim); font-size: 12px; font-family: var(--mono); }
+  select {
+    background: transparent; color: var(--fg); border: none; outline: none;
+    font-family: var(--mono); font-size: 13px; padding: 15px 0; cursor: pointer;
+  }
+  select option { background: var(--card); }
+  #go {
+    background: var(--grad); color: #0a0e14; border: none; border-radius: 10px;
+    padding: 0 30px; font-size: 14.5px; font-weight: 800; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(88,166,255,.35); transition: transform .12s, box-shadow .12s;
+  }
+  #go:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(88,166,255,.45); }
+  #go:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+  .samples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+  .chip {
+    background: var(--bg); border: 1px solid var(--border2); color: var(--muted);
+    border-radius: 100px; padding: 6px 14px; font-size: 12.5px; font-family: var(--mono);
+    cursor: pointer; transition: .15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+
+  /* ── Status ─────────────────────────────── */
+  .status { display: none; margin-top: 20px; }
+  .status.active { display: block; }
+  .status .stage-row { display: flex; align-items: center; gap: 12px; }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 3px solid var(--border2); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status .stage { font-weight: 700; font-size: 14.5px; }
+  .progress { height: 8px; background: var(--border); border-radius: 100px; overflow: hidden; margin-top: 14px; }
+  .progress span {
+    display: block; height: 100%; width: 0%; border-radius: 100px;
+    background: var(--grad); transition: width .5s ease;
+  }
+  .msg { margin-top: 12px; color: var(--muted); font-size: 13px; font-family: var(--mono); }
+  .msg.err { color: var(--danger); }
+
+  /* ── Results ────────────────────────────── */
+  .hidden { display: none; }
+  #results { margin-top: 26px; animation: fadeUp .4s ease; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; text-align: center; transition: border-color .15s;
+  }
+  .card:hover { border-color: var(--border2); }
+  .card .num { font-size: 26px; font-weight: 800; font-family: var(--mono); letter-spacing: -.5px; }
+  .card .lbl { color: var(--dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: .9px; margin-top: 3px; }
+  .num.ok { color: var(--ok); } .num.bad { color: var(--danger); } .num.warn { color: var(--warn); }
+  .num.accent { color: var(--accent); }
+
+  .links { display: flex; gap: 10px; flex-wrap: wrap; margin: 22px 0 8px; }
+  .btn-primary, .btn-ghost {
+    text-decoration: none; font-size: 13.5px; font-weight: 700; border-radius: 9px;
+    padding: 10px 18px; display: inline-flex; align-items: center; gap: 8px; transition: .15s;
+  }
+  .btn-primary { background: var(--grad); color: #0a0e14; box-shadow: 0 6px 20px rgba(88,166,255,.3); }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-ghost { color: var(--fg); border: 1px solid var(--border2); background: var(--card); }
+  .btn-ghost:hover { border-color: var(--accent); }
+
+  h2 {
+    font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); margin: 30px 0 12px; display: flex; align-items: center; gap: 8px;
+  }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 16px; font-size: 13px; }
+  th {
+    background: var(--card2); color: var(--dim); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+  }
+  td { border-top: 1px solid var(--border); }
+  tr:hover td { background: rgba(88,166,255,.03); }
+  code { font-family: var(--mono); font-size: 12.5px; color: var(--accent); word-break: break-all; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 11px;
+    font-weight: 800; letter-spacing: .4px; font-family: var(--mono);
+  }
+  .b-todo { background: rgba(210,153,34,.12); color: var(--warn); }
+  .b-fixme { background: rgba(248,81,73,.12); color: var(--danger); }
+  .b-hack { background: rgba(210,153,34,.12); color: var(--warn); }
+  .b-optimize { background: rgba(88,166,255,.12); color: var(--accent); }
+  .commit-count { font-family: var(--mono); font-weight: 700; color: var(--warn); }
+  .empty { padding: 18px 20px; color: var(--ok); font-size: 13.5px; }
+  .empty .dim { color: var(--dim); }
+  .cycle-path { color: var(--danger); font-size: 13px; padding: 10px 16px; }
+
+  /* ── Footer ─────────────────────────────── */
+  footer {
+    margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; gap: 14px;
+    flex-wrap: wrap; color: var(--dim); font-size: 13px;
+  }
+  footer a { color: var(--muted); text-decoration: none; font-weight: 600; }
+  footer a:hover { color: var(--accent); }
+  footer .mono { font-family: var(--mono); font-size: 12px; }
+
+  @media (max-width: 760px) {
+    .input-row { flex-direction: column; }
+    .depth-wrap, #go { width: 100%; justify-content: center; }
+    .hero .stats { gap: 20px; }
+    header nav { display: none; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🚀 GitDrift</h1>
-  <div class="sub">Paste any GitHub repository URL — shallow-clone, analyze, and get a full drift report. No local clone needed.</div>
+  <header>
+    <div class="logo">
+      <div class="logo-mark">G</div>
+      <div class="stack">
+        GitDrift
+        <small>MONOREPO DRIFT ANALYZER</small>
+      </div>
+    </div>
+    <nav>
+      <a href="https://github.com/gunjitdhakar15/GitDrift" target="_blank">Source</a>
+      <a class="btn" href="https://github.com/gunjitdhakar15/GitDrift/blob/master/README.md" target="_blank">README</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <span class="kicker">Open source · Go · zero install</span>
+    <h1>Spot the rot in any<br><span class="grad">GitHub repository</span></h1>
+    <p>
+      Paste a repo URL and GitDrift shallow-clones it, then scans for high-churn hotspots,
+      stale zombie files, circular imports, and technical debt — in seconds.
+    </p>
+    <div class="stats">
+      <div><b>100k+</b><span>files / sec</span></div>
+      <div><b>7</b><span>analyzers</span></div>
+      <div><b>1</b><span>command</span></div>
+    </div>
+  </section>
 
   <div class="box">
-    <label for="url">GitHub repository</label>
-    <input type="text" id="url" placeholder="https://github.com/gin-gonic/gin" value="https://github.com/gin-gonic/gin">
-    <div class="row">
-      <div class="grow"></div>
-      <div class="depth">
-        <label for="depth">Clone depth</label>
+    <label for="url">GitHub repository URL</label>
+    <div class="input-row">
+      <div class="url-input">
+        <span class="ic">▸</span>
+        <input type="text" id="url" placeholder="https://github.com/gin-gonic/gin" value="https://github.com/gin-gonic/gin" spellcheck="false">
+      </div>
+      <div class="depth-wrap">
+        <span>depth</span>
         <select id="depth">
           <option value="50">50 commits</option>
           <option value="100" selected>100 commits</option>
@@ -77,50 +251,61 @@
           <option value="1000">1000 commits</option>
         </select>
       </div>
-      <div style="align-self:flex-end">
-        <button id="go" onclick="analyze()">Analyze</button>
-      </div>
+      <button id="go" onclick="analyze()">Analyze ↦</button>
     </div>
     <div class="samples">
       <span class="chip" onclick="setUrl('https://github.com/gin-gonic/gin')">gin-gonic/gin</span>
       <span class="chip" onclick="setUrl('https://github.com/uber-go/zap')">uber-go/zap</span>
       <span class="chip" onclick="setUrl('https://github.com/spf13/cobra')">spf13/cobra</span>
-      <span class="chip" onclick="setUrl('https://github.com/minio/minio')">minio/minio</span>
       <span class="chip" onclick="setUrl('https://github.com/gohugoio/hugo')">gohugoio/hugo</span>
+      <span class="chip" onclick="setUrl('https://github.com/microsoft/vscode')">microsoft/vscode</span>
     </div>
   </div>
 
   <div class="status box" id="status">
-    <span id="stage" style="font-weight:600"></span>
+    <div class="stage-row">
+      <div class="spinner" id="spin"></div>
+      <span class="stage" id="stage">Starting…</span>
+    </div>
     <div class="progress"><span id="bar"></span></div>
     <div class="msg" id="msg"></div>
   </div>
 
-  <div id="results" class="hidden">
+  <section id="results" class="hidden">
     <div class="cards">
-      <div class="card"><div class="num" id="c-files"></div><div class="lbl">Files</div></div>
-      <div class="card"><div class="num" id="c-lines"></div><div class="lbl">Lines</div></div>
-      <div class="card"><div class="num" id="c-pkgs"></div><div class="lbl">Packages</div></div>
-      <div class="card"><div class="num warn" id="c-todos"></div><div class="lbl">TODOs</div></div>
-      <div class="card"><div class="num" id="c-hot"></div><div class="lbl">Hotspots</div></div>
-      <div class="card"><div class="num" id="c-stale"></div><div class="lbl">Stale files</div></div>
-      <div class="card"><div class="num ok" id="c-cycles"></div><div class="lbl">Import cycles</div></div>
+      <div class="card"><div class="num accent" id="c-files">–</div><div class="lbl">Files</div></div>
+      <div class="card"><div class="num accent" id="c-lines">–</div><div class="lbl">Lines</div></div>
+      <div class="card"><div class="num accent" id="c-pkgs">–</div><div class="lbl">Packages</div></div>
+      <div class="card"><div class="num warn" id="c-todos">–</div><div class="lbl">Tech debt</div></div>
+      <div class="card"><div class="num warn" id="c-hot">–</div><div class="lbl">Hotspots</div></div>
+      <div class="card"><div class="num warn" id="c-stale">–</div><div class="lbl">Stale files</div></div>
+      <div class="card"><div class="num ok" id="c-cycles">–</div><div class="lbl">Import cycles</div></div>
     </div>
 
     <div class="links">
-      <a id="link-report" href="#" target="_blank" onclick="return false">Open full dashboard ↗</a>
-      <a id="link-json" href="#" target="_blank">Download JSON</a>
+      <a class="btn-primary" id="link-report" href="#" target="_blank" onclick="return false">Open full dashboard ↗</a>
+      <a class="btn-ghost" id="link-json" href="#" target="_blank">Download JSON</a>
     </div>
 
-    <h2>High-churn hotspots</h2>
-    <table id="t-hot"></table>
-    <h2>Tech debt</h2>
-    <table id="t-todo"></table>
-    <h2>Stale files</h2>
-    <table id="t-stale"></table>
-    <h2>Circular imports</h2>
-    <div id="t-cycles" style="color:var(--muted)"></div>
-  </div>
+    <h2>🔥 High-churn hotspots</h2>
+    <div class="table-wrap"><table id="t-hot"></table></div>
+
+    <h2>🛠 Tech debt</h2>
+    <div class="table-wrap"><table id="t-todo"></table></div>
+
+    <h2>🧟 Stale files</h2>
+    <div class="table-wrap"><table id="t-stale"></table></div>
+
+    <h2>⭕ Circular imports</h2>
+    <div class="table-wrap" id="t-cycles"></div>
+  </section>
+
+  <footer>
+    <div>
+      GitDrift · built with <b style="color:var(--accent)">Go</b> — worker-pool scanning, DFS cycle detection, git history parsing
+    </div>
+    <a href="https://github.com/gunjitdhakar15/GitDrift" target="_blank">★ github.com/gunjitdhakar15/GitDrift</a>
+  </footer>
 </div>
 
 <script>
@@ -137,7 +322,7 @@ function analyze() {
   msgEl.className = 'msg';
   msgEl.textContent = '';
   statusEl.classList.add('active');
-  document.getElementById('bar').style.width = '5%';
+  document.getElementById('bar').style.width = '4%';
   document.getElementById('stage').textContent = 'Submitting job…';
   document.getElementById('go').disabled = true;
 
@@ -151,10 +336,10 @@ function analyze() {
     if (!r.ok) throw new Error(body.error || 'request failed');
     jobId = body.id;
     document.getElementById('stage').textContent = 'Job ' + jobId;
-    pollTimer = setInterval(poll, 1200);
+    pollTimer = setInterval(poll, 1500);
   })
   .catch(err => {
-    msgEl.textContent = 'Error: ' + err.message;
+    msgEl.textContent = '⚠ ' + err.message + ' — if this is the first request after idle, the free instance may still be waking up. Try again in 30s.';
     msgEl.className = 'msg err';
     document.getElementById('go').disabled = false;
     document.getElementById('bar').style.width = '0%';
@@ -170,38 +355,40 @@ function poll() {
 
     const stage = document.getElementById('stage');
     const bar = document.getElementById('bar');
-    const msg = document.getElementById('msg');
-    msg.className = 'msg';
 
-    if (body.stage === 'queued')   { stage.textContent = 'Queued — waiting for a worker'; bar.style.width = '5%'; }
-    if (body.stage === 'cloning')  { stage.textContent = 'Cloning repository (shallow clone)…'; bar.style.width = '35%'; }
-    if (body.stage === 'analyzing'){ stage.textContent = 'Running analyzers…'; bar.style.width = '70%'; }
+    if (body.stage === 'queued')    { stage.textContent = 'Queued — waiting for a worker'; bar.style.width = '4%'; }
+    if (body.stage === 'cloning')   { stage.textContent = 'Cloning repository (shallow)…'; bar.style.width = '35%'; }
+    if (body.stage === 'analyzing') { stage.textContent = 'Running analyzers…'; bar.style.width = '70%'; }
 
     if (body.stage === 'failed') {
       clearInterval(pollTimer);
       stage.textContent = 'Analysis failed';
-      msg.textContent = body.error || 'Unknown error';
-      msg.className = 'msg err';
+      const m = document.getElementById('msg');
+      m.textContent = body.error || 'Unknown error';
+      m.className = 'msg err';
       document.getElementById('go').disabled = false;
+      document.getElementById('bar').style.width = '0%';
       return;
     }
 
     if (body.stage === 'done') {
       clearInterval(pollTimer);
       bar.style.width = '100%';
-      stage.textContent = 'Analysis complete';
+      stage.textContent = 'Analysis complete ✓';
       const r = body.result;
-      msg.textContent = (r.stats.TotalFiles + ' files · ' + r.stats.TotalLines.toLocaleString() +
-        ' lines · ' + (r.todos ? r.todos.length : 0) + ' TODOs · ' +
-        (r.import_cycles ? r.import_cycles.length : 0) + ' cycles');
+      document.getElementById('msg').textContent =
+        (r.stats.TotalFiles + ' files · ' + r.stats.TotalLines.toLocaleString() + ' lines · ' +
+         (r.todos ? r.todos.length : 0) + ' TODOs · ' + (r.import_cycles ? r.import_cycles.length : 0) + ' cycles');
       showResults(r);
       document.getElementById('go').disabled = false;
+      setTimeout(() => document.getElementById('results').scrollIntoView({ behavior: 'smooth' }), 150);
     }
   })
   .catch(err => {
     clearInterval(pollTimer);
-    document.getElementById('msg').textContent = 'Error: ' + err.message;
-    document.getElementById('msg').className = 'msg err';
+    const m = document.getElementById('msg');
+    m.textContent = '⚠ ' + err.message;
+    m.className = 'msg err';
     document.getElementById('go').disabled = false;
   });
 }
@@ -227,24 +414,35 @@ function showResults(r) {
 
   document.getElementById('t-hot').innerHTML =
     '<tr><th>Commits</th><th>File</th></tr>' +
-    (r.hotspots || []).map(h => `<tr><td>${h.CommitCount}</td><td><code>${esc(h.Path)}</code></td></tr>`).join('');
+    (r.hotspots || []).map(h =>
+      `<tr><td class="commit-count">${h.CommitCount}</td><td><code>${esc(h.Path)}</code></td></tr>`).join('') +
+    ((r.hotspots || []).length ? '' : emptyRow('no git history or no hotspots'));
 
   document.getElementById('t-todo').innerHTML =
     '<tr><th>Tag</th><th>Location</th><th>Content</th></tr>' +
     (r.todos || []).slice(0, 25).map(t =>
-      `<tr><td>${t.Tag}</td><td><code>${esc(t.File)}:${t.Line}</code></td><td>${esc(t.Content.slice(0, 90))}</td></tr>`).join('');
+      `<tr><td><span class="badge b-${esc(t.Tag.toLowerCase())}">${esc(t.Tag)}</span></td>` +
+      `<td><code>${esc(t.File)}:${t.Line}</code></td><td>${esc(t.Content.slice(0, 90))}</td></tr>`).join('') +
+    ((r.todos || []).length ? '' : emptyRow('no tech debt markers found'));
 
   document.getElementById('t-stale').innerHTML =
     '<tr><th>Days idle</th><th>File</th></tr>' +
-    (r.stale_files || []).map(s => `<tr><td>${s.DaysIdle}</td><td><code>${esc(s.Path)}</code></td></tr>`).join('');
+    (r.stale_files || []).map(s =>
+      `<tr><td class="commit-count">${s.DaysIdle}d</td><td><code>${esc(s.Path)}</code></td></tr>`).join('') +
+    ((r.stale_files || []).length ? '' : emptyRow('clean — no stale files found'));
 
   const cyclesEl = document.getElementById('t-cycles');
   cyclesEl.innerHTML = (r.import_cycles || []).length
-    ? (r.import_cycles || []).map(c => `<div style="color:var(--danger)">✗ ${c.Path.map(p => `<code>${esc(p)}</code>`).join(' → ')}</div>`).join('')
-    : 'No circular imports detected ✓';
+    ? (r.import_cycles || []).map(c =>
+        `<div class="cycle-path">✗ ${c.Path.map(p => `<code>${esc(p)}</code>`).join(' → ')}</div>`).join('')
+    : `<div class="empty">✓ No circular imports detected</div>`;
 }
 
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function emptyRow(text) {
+  return `<tr><td colspan="2" class="empty">✓ ${text}</td></tr>`;
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 </script>
 </body>
 </html>
