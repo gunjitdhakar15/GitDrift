@@ -1,0 +1,16 @@
+# Binaries
+gitdrift
+gitdrift.exe
+*.exe
+
+# Reports
+gitdrift-report.html
+*.html
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/

@@ -4,79 +4,68 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 type TodoItem struct {
 	File    string
 	Line    int
-	Tag     string // TODO, FIXME, HACK
+	Tag     string // TODO, FIXME, HACK, OPTIMIZE
 	Content string
 }
 
-// ScanTodos scans all source files in directory for TODO/FIXME comments.
-func ScanTodos(rootDir string) ([]TodoItem, error) {
-	var items []TodoItem
+var todoPattern = regexp.MustCompile(`\b(TODO|FIXME|HACK|OPTIMIZE)\b`)
 
-	ignoredDirs := map[string]bool{
-		".git": true, "node_modules": true, "vendor": true, "dist": true, "build": true,
+// ScanTodos scans all source files concurrently for TODO/FIXME comments.
+func ScanTodos(rootDir string) ([]TodoItem, error) {
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		return nil, err
 	}
 
-	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			if ignoredDirs[info.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Only check source files
-		ext := filepath.Ext(path)
-		if ext != ".go" && ext != ".ts" && ext != ".js" && ext != ".py" && ext != ".rs" {
-			return nil
-		}
-
-		file, err := os.Open(path)
-		if err != nil {
-			return nil
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		lineNum := 0
-		for scanner.Scan() {
-			lineNum++
-			text := scanner.Text()
-			upper := strings.ToUpper(text)
-
-			var tag string
-			if strings.Contains(upper, "TODO") {
-				tag = "TODO"
-			} else if strings.Contains(upper, "FIXME") {
-				tag = "FIXME"
-			} else if strings.Contains(upper, "HACK") {
-				tag = "HACK"
-			} else if strings.Contains(upper, "OPTIMIZE") {
-				tag = "OPTIMIZE"
-			}
-
-			if tag != "" {
-				rel, _ := filepath.Rel(rootDir, path)
-				items = append(items, TodoItem{
-					File:    filepath.ToSlash(rel),
-					Line:    lineNum,
-					Tag:     tag,
-					Content: strings.TrimSpace(text),
-				})
-			}
-		}
-
-		return nil
+	items, err := ConcurrentMap(rootDir, func(path string, info os.FileInfo) []TodoItem {
+		rel, _ := filepath.Rel(absRoot, path)
+		return scanFileTodos(filepath.ToSlash(rel), path)
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return items, err
+	var flattened []TodoItem
+	for _, fileItems := range items {
+		flattened = append(flattened, fileItems...)
+	}
+	return flattened, nil
+}
+
+// scanFileTodos extracts every TODO-family marker in a single file,
+// matching at word boundaries so identifiers like TodoItem are ignored.
+func scanFileTodos(displayPath, path string) []TodoItem {
+	var items []TodoItem
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		text := scanner.Text()
+		match := todoPattern.FindString(text)
+		if match == "" {
+			continue
+		}
+		items = append(items, TodoItem{
+			File:    displayPath,
+			Line:    lineNum,
+			Tag:     strings.ToUpper(match),
+			Content: strings.TrimSpace(text),
+		})
+	}
+	return items
 }

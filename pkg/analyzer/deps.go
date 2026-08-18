@@ -3,7 +3,7 @@ package analyzer
 import (
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 )
 
 type RepoStats struct {
@@ -13,44 +13,65 @@ type RepoStats struct {
 	DirectoryCount int
 }
 
-// AnalyzeRepo computes codebase metrics and language breakdown.
+// AnalyzeRepo computes codebase metrics and language breakdown concurrently.
 func AnalyzeRepo(rootDir string) (RepoStats, error) {
-	stats := RepoStats{
-		Languages: make(map[string]int),
+	stats := RepoStats{Languages: make(map[string]int)}
+	var mu sync.Mutex
+
+	dirCount, err := countDirectories(rootDir)
+	if err != nil {
+		return stats, err
 	}
+	stats.DirectoryCount = dirCount
 
-	ignoredDirs := map[string]bool{
-		".git": true, "node_modules": true, "vendor": true, "dist": true, "build": true,
-	}
+	_, err = ConcurrentMap(rootDir, func(path string, info os.FileInfo) struct{} {
+		lines := countLines(path)
 
-	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			if ignoredDirs[info.Name()] {
-				return filepath.SkipDir
-			}
-			stats.DirectoryCount++
-			return nil
-		}
-
+		mu.Lock()
 		stats.TotalFiles++
+		stats.TotalLines += lines
 		ext := filepath.Ext(path)
 		if ext != "" {
 			stats.Languages[ext]++
 		}
+		mu.Unlock()
+		return struct{}{}
+	})
+	if err != nil {
+		return stats, err
+	}
 
-		// Count lines
-		content, err := os.ReadFile(path)
-		if err == nil {
-			lines := strings.Count(string(content), "\n")
-			stats.TotalLines += lines
+	return stats, nil
+}
+
+func countDirectories(rootDir string) (int, error) {
+	count := 0
+	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
 		}
-
+		if !info.IsDir() {
+			return nil
+		}
+		if path != rootDir && IgnoredDirs[info.Name()] {
+			return filepath.SkipDir
+		}
+		count++
 		return nil
 	})
+	return count, err
+}
 
-	return stats, err
+func countLines(path string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	lines := 1
+	for _, b := range data {
+		if b == '\n' {
+			lines++
+		}
+	}
+	return lines
 }
