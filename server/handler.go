@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"time"
 )
 
 // Handler wires the job store and analysis engine to HTTP routes.
@@ -26,6 +27,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/":
 		h.handleIndex(w, r)
+	case r.Method == http.MethodGet && (r.URL.Path == "/healthz" || r.URL.Path == "/api/health"):
+		h.handleHealth(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/analyze":
 		h.handleAnalyze(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/status":
@@ -35,6 +38,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// handleHealth answers lightweight probes used by hosting platforms and
+// keep-alive monitors to prevent free-tier cold starts.
+func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+		"app":    "gitdrift",
+		"time":   time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
