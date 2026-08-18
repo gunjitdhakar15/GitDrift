@@ -1,0 +1,13 @@
+# Render blueprint — https://dashboard.render.com/blueprints
+services:
+  - type: web
+    name: gitdrift
+    runtime: go
+    repo: https://github.com/gunjitdhakar15/GitDrift
+    plan: free
+    healthCheckPath: /
+    buildCommand: go build -o gitdrift-server ./server
+    startCommand: ./gitdrift-server
+    envVars:
+      - key: GO_VERSION
+        value: "1.22"

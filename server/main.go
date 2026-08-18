@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -14,10 +15,16 @@ import (
 var uiFS embed.FS
 
 func main() {
-	addr := flag.String("addr", ":8080", "listen address")
+	// Render and other PaaS providers inject PORT; fall back to :8080 locally.
+	defaultAddr := ":" + os.Getenv("PORT")
+	if defaultAddr == ":" {
+		defaultAddr = ":8080"
+	}
+
+	addr := flag.String("addr", defaultAddr, "listen address")
 	maxJobs := flag.Int("max-jobs", 20, "max concurrent jobs retained")
 	ttl := flag.Duration("ttl", 30*time.Minute, "job retention window")
-	cloneTimeout := flag.Duration("clone-timeout", 120*time.Second, "max clone time")
+	cloneTimeout := flag.Duration("clone-timeout", 180*time.Second, "max clone time")
 	flag.Parse()
 
 	sub, err := fs.Sub(uiFS, ".")
