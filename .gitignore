@@ -1,11 +1,17 @@
 # Binaries
 gitdrift
 gitdrift.exe
+gitdrift-server
+gitdrift-server.exe
 *.exe
 
 # Reports
 gitdrift-report.html
+gin-health.html
 *.html
+
+# Logs
+*.log
 
 # OS
 .DS_Store

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -23,7 +24,7 @@ type Report struct {
 }
 
 // WriteJSON serializes the report as indented JSON.
-func (r *Report) WriteJSON(w *os.File) error {
+func (r *Report) WriteJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(r)
@@ -31,6 +32,15 @@ func (r *Report) WriteJSON(w *os.File) error {
 
 // WriteHTML renders the report as a self-contained dashboard page.
 func (r *Report) WriteHTML(path string) error {
+	var buf strings.Builder
+	if err := r.WriteHTMLTo(&buf); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(buf.String()), 0644)
+}
+
+// WriteHTMLTo streams the report as a self-contained dashboard page.
+func (r *Report) WriteHTMLTo(w io.Writer) error {
 	type langRow struct {
 		Ext   string
 		Count int
@@ -61,13 +71,7 @@ func (r *Report) WriteHTML(path string) error {
 		return err
 	}
 
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	return tmpl.Execute(f, data)
+	return tmpl.Execute(w, data)
 }
 
 // summary computes headline numbers for the report banner.

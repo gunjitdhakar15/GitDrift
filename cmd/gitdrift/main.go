@@ -121,7 +121,7 @@ func cmdScan(args []string, rootDir string) {
 	fs.Parse(args)
 
 	start := time.Now()
-	report, err := buildReport(rootDir)
+	report, err := analyzer.BuildReport(rootDir)
 	if err != nil {
 		fail("%v", err)
 	}
@@ -216,7 +216,7 @@ func cmdDeps(args []string, rootDir string) {
 	jsonOut := fs.Bool("json", false, "JSON output")
 	fs.Parse(args)
 
-	cycles, packages, err := analyzer.FindImportCycles(rootDir, readModuleName(rootDir))
+	cycles, packages, err := analyzer.FindImportCycles(rootDir, analyzer.ModuleName(rootDir))
 	if err != nil {
 		fail("%v", err)
 	}
@@ -239,7 +239,7 @@ func cmdReport(args []string, rootDir string) {
 	out := fs.String("out", "gitdrift-report.html", "Output HTML file")
 	fs.Parse(args)
 
-	report, err := buildReport(rootDir)
+	report, err := analyzer.BuildReport(rootDir)
 	if err != nil {
 		fail("%v", err)
 	}
@@ -248,59 +248,6 @@ func cmdReport(args []string, rootDir string) {
 		fail("write report: %v", err)
 	}
 	fmt.Printf("%s HTML report written to %s\n", green("✔"), bold(*out))
-}
-
-// buildReport runs every analyzer once and packages the results.
-func buildReport(rootDir string) (*analyzer.Report, error) {
-	stats, err := analyzer.AnalyzeRepo(rootDir)
-	if err != nil {
-		return nil, fmt.Errorf("repo stats: %w", err)
-	}
-
-	hotspots, err := analyzer.FindHotspots(rootDir, 15)
-	if err != nil {
-		return nil, fmt.Errorf("hotspots: %w", err)
-	}
-
-	stale, err := analyzer.FindStaleFiles(rootDir, 90)
-	if err != nil {
-		return nil, fmt.Errorf("stale files: %w", err)
-	}
-
-	todos, err := analyzer.ScanTodos(rootDir)
-	if err != nil {
-		return nil, fmt.Errorf("todos: %w", err)
-	}
-
-	cycles, packages, err := analyzer.FindImportCycles(rootDir, readModuleName(rootDir))
-	if err != nil {
-		return nil, fmt.Errorf("import cycles: %w", err)
-	}
-
-	return &analyzer.Report{
-		GeneratedAt:  time.Now(),
-		Repo:         rootDir,
-		Stats:        stats,
-		Hotspots:     hotspots,
-		StaleFiles:   stale,
-		Todos:        todos,
-		ImportCycles: cycles,
-		Packages:     packages,
-	}, nil
-}
-
-func readModuleName(rootDir string) string {
-	data, err := os.ReadFile(filepath.Join(rootDir, "go.mod"))
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
-		}
-	}
-	return ""
 }
 
 // --- presentation helpers ---

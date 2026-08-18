@@ -19,13 +19,14 @@ Designed in the style of high-performance developer tooling (like `tokei` or `ri
 
 ## ⚙️ Key Architecture & Engineering Features
 
+- **Web Console (`server/`):** Paste any GitHub URL → the server shallow-clones in the background, runs every analyzer, and serves the report — zero local setup. Async job store with TTL reaper, injectable analysis engine for testability, embedded single-file UI via `go:embed`.
 - **Concurrent Analysis Engine (`pkg/analyzer/scan.go`):** Worker-pool based file traversal using goroutines (bounded by `runtime.NumCPU`), enabling sub-second scans of 10k+ file monorepos.
 - **Circular Import Detection (`cycles.go`):** Full Go import-graph construction and depth-first cycle detection across internal packages, resolving imports via the module path.
 - **Git Churn Hotspots (`hotspots.go`):** Parses `git log --name-only` streams to rank files by modification frequency — the classic code-smell indicator for refactoring targets.
 - **Zombie / Stale File Detection (`stale.go`):** Cross-references `git ls-files` with per-file commit history to flag abandoned code untouched for configurable thresholds.
 - **Tech Debt Scanner (`todos.go`):** Word-boundary regex matching for `TODO` / `FIXME` / `HACK` / `OPTIMIZE` markers with precise file:line reporting — no false positives on identifiers like `TodoItem`.
 - **Self-Contained HTML Dashboard (`report.go`):** Single-file, dependency-free HTML report with dark GitHub-style theming, stats cards, language share bars, and full drill-down tables. No CDN, no build step — open it anywhere.
-- **Machine-Readable JSON:** Every command supports `--json` for CI/CD quality gates and PR comment automation.
+- **Machine-Readable JSON:** Every command and API endpoint supports `--json` for CI/CD quality gates and PR comment automation.
 - **ANSI Terminal UI:** Color-coded sections, alignment columns, and status indicators with automatic `NO_COLOR` / dumb-terminal fallback.
 
 ---
@@ -69,7 +70,27 @@ go build -o gitdrift ./cmd/gitdrift
 
 ---
 
-## 📊 Sample Output
+## 🌐 Web Console — analyze any GitHub repo without cloning
+
+Paste a GitHub URL, get a full report. The server shallow-clones the repo in the background, runs every analyzer, and serves the dashboard.
+
+```bash
+go build -o gitdrift-server ./server
+./gitdrift-server -addr :8080
+```
+
+Then open http://localhost:8080 — enter any public GitHub URL (or pick a sample repo) and watch the live progress.
+
+### API
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/analyze` | Body: `{"url": "...", "depth": 100}` → `202` + job id |
+| `GET /api/status?id=<id>` | Poll job: `queued` → `cloning` → `done` / `failed` |
+| `GET /api/report?id=<id>` | Full HTML dashboard (self-contained file) |
+| `GET /api/report?id=<id>&json=1` | Machine-readable report JSON |
+
+Flags: `-addr` (default `:8080`), `-max-jobs`, `-ttl` (job retention), `-clone-timeout`. Set `GITDRIFT_GITHUB_TOKEN` for private repos or higher clone rate limits.
 
 ```text
 ┌────────────────────────────────────────────┐
