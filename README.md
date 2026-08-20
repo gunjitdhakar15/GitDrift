@@ -142,18 +142,6 @@ Benchmark suite runs against a synthetic 2,000-file monorepo fixture:
 | `BenchmarkAnalyzeRepo` | Concurrent line/file/language metrics |
 | `BenchmarkFindImportCycles` | Import-graph build + DFS cycle detection (100 packages) |
 
----
-
-## 📝 Resume Bullet Point
-
-> **GitDrift — Monorepo Architectural Analyzer (Go)**
-> • Developed a high-performance CLI tool and static analysis engine in Go that detects architectural drift, circular imports, high-churn git hotspots, and stale files across monorepos.
-> • Engineered a goroutine worker-pool traversal engine and git-history parser, scanning 10k+ files in under 500ms with sub-millisecond zero-copy overhead.
-> • Built a self-contained HTML dashboard and JSON export pipeline for CI/CD quality gates, plus an ANSI-colored terminal UI with automatic fallback.
-> • Wrote 10+ unit tests and benchmarks covering import-graph cycle detection, concurrent scanning, and git parsing edge cases.
-
----
-
 ## 🛣️ Roadmap
 
 - [ ] Multi-language AST parsing (tree-sitter) for dead-code and boundary violation detection
